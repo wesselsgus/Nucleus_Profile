@@ -1,20 +1,45 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# NUCLEUS Terminal Ops v2.4.0
 
-This contains everything you need to run your app locally.
+A high-performance terminal UI for jumphost management, server scanning, and web vulnerability analysis.
 
-View your app in AI Studio: https://ai.studio/apps/drive/14LYS2Rsvw6Fi0-KHYQ8dRM2tEt7YSSEb
+## 🐧 Linux Packaging (.deb & .rpm)
 
-## Run Locally
+You can build native Linux installers directly using npm.
 
-**Prerequisites:**  Node.js
+### 1. Build the packages
+Ensure you have installed the project dependencies first:
+```bash
+npm install
+npm run build:linux
+```
 
+### 2. Install on Debian/Ubuntu
+```bash
+sudo dpkg -i dist_desktop/nucleus-terminal_2.4.0_amd64.deb
+# If there are missing dependencies:
+sudo apt-get install -f
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 3. Install on Red Hat/Fedora/CentOS
+```bash
+sudo rpm -i dist_desktop/nucleus-terminal-2.4.0.x86_64.rpm
+```
+
+## 🚀 Development Mode (Electron)
+To run the terminal in an Electron window with hot-reload enabled:
+```bash
+npm run electron-dev
+```
+
+## 🌐 Web Mode
+To run in a standard browser:
+```bash
+npm run dev
+```
+
+## 🛠️ Security Setup
+Create a `.env` file and add:
+```env
+VITE_API_KEY=your_gemini_api_key
+```

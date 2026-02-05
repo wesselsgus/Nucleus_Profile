@@ -1,7 +1,11 @@
-
 import { GoogleGenAI } from "@google/genai";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Support both standard process.env and Vite's import.meta.env for local development
+const getApiKey = () => {
+  return (process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY || "");
+};
+
+const getAI = () => new GoogleGenAI({ apiKey: getApiKey() });
 
 export const simulateTroubleshooting = async (hostName: string, action: string) => {
   const ai = getAI();
