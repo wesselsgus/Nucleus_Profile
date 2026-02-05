@@ -1,0 +1,5 @@
+{
+  "name": "NUCLEUS Terminal Ops",
+  "description": "A high-performance terminal UI for jumphost management, server scanning, and web vulnerability analysis with simulated live script execution.",
+  "requestFramePermissions": []
+}
