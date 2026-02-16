@@ -1,14 +1,10 @@
+
 import { GoogleGenAI } from "@google/genai";
 
-// Support both standard process.env and Vite's import.meta.env for local development
-const getApiKey = () => {
-  return (process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY || "");
-};
-
-const getAI = () => new GoogleGenAI({ apiKey: getApiKey() });
-
+// Standardize simulation functions to use the recommended GoogleGenAI initialization pattern
 export const simulateTroubleshooting = async (hostName: string, action: string) => {
-  const ai = getAI();
+  // Create a new GoogleGenAI instance right before making an API call to ensure it always uses the most up-to-date API key
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Simulate a terminal output for a system administrator running "${action}" on host "${hostName}". 
@@ -19,7 +15,8 @@ export const simulateTroubleshooting = async (hostName: string, action: string) 
 };
 
 export const simulateServerScan = async (hostName: string) => {
-  const ai = getAI();
+  // Create a new GoogleGenAI instance right before making an API call
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Simulate a comprehensive security and system health scan on host "${hostName}". 
@@ -31,7 +28,8 @@ export const simulateServerScan = async (hostName: string) => {
 };
 
 export const simulateWebScan = async (url: string, tool: string) => {
-  const ai = getAI();
+  // Create a new GoogleGenAI instance right before making an API call
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Simulate a web vulnerability scan report for URL "${url}" using tool "${tool}". 

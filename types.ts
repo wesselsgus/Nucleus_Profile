@@ -4,7 +4,8 @@ export enum MenuState {
   JUMPHOSTS = 'JUMPHOSTS',
   SERVER_SCAN = 'SERVER_SCAN',
   WEB_SCAN = 'WEB_SCAN',
-  EXECUTING = 'EXECUTING'
+  EXECUTING = 'EXECUTING',
+  CONFIG = 'CONFIG'
 }
 
 export interface TerminalLine {
