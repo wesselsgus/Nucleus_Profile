@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isVerbose, setIsVerbose] = useState(false);
   
   // Identity State
   const [currentUser, setCurrentUser] = useState<NucleusUser>(() => {
@@ -110,9 +111,9 @@ const App: React.FC = () => {
   const runFullScan = (host: Host, tool: string) => {
     setMenuState(MenuState.EXECUTING);
     handleAction(async () => {
-      addLine(`$ nucleus-cli scan --node ${host.id} --tactical-tool "${tool}"`, 'command');
+      addLine(`$ nucleus-cli scan --node ${host.id} --tactical-tool "${tool}" ${isVerbose ? '--verbose' : ''}`, 'command');
       addLine(`Initiating remote telemetry on ${host.ip}...`, 'info');
-      const result = await simulateServerScan(`${host.name} via ${tool}`);
+      const result = await simulateServerScan(`${host.name} via ${tool}`, isVerbose);
       const chunks = result.split('\n');
       for (const chunk of chunks) {
         addLine(chunk, 'output');
@@ -321,7 +322,21 @@ const App: React.FC = () => {
     <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
       <div className="flex justify-between items-center border-b border-green-800 pb-2">
         <h2 className="text-xl font-bold uppercase tracking-widest text-green-400">Tactical Server Audits</h2>
-        <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-1">
+            <input 
+              type="checkbox" 
+              id="verbose-toggle" 
+              checked={isVerbose} 
+              onChange={(e) => setIsVerbose(e.target.checked)}
+              className="accent-green-500 cursor-pointer w-3 h-3"
+            />
+            <label htmlFor="verbose-toggle" className="text-[10px] font-mono uppercase cursor-pointer select-none text-green-700 hover:text-green-500">
+              Verbose Output (--verbose)
+            </label>
+          </div>
+          <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
+        </div>
       </div>
       <div className="space-y-4 overflow-y-auto max-h-[45vh] pr-2">
         {(Object.entries(hostsByRegion) as [string, Host[]][]).map(([region, regionHosts]) => (

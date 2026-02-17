@@ -14,13 +14,13 @@ export const simulateTroubleshooting = async (hostName: string, action: string) 
   return response.text || "Error retrieving logs.";
 };
 
-export const simulateServerScan = async (hostName: string) => {
+export const simulateServerScan = async (hostName: string, verbose: boolean = false) => {
   // Create a new GoogleGenAI instance right before making an API call
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Simulate a comprehensive security and system health scan on host "${hostName}". 
-    The script runs remotely via SSH, collects metrics, checks open ports, and then deletes itself. 
+    ${verbose ? "CRITICAL: This is a VERBOSE scan (--verbose). Include detailed memory address hex dumps, specific kernel system call traces (syscall), low-level disk I/O metrics, and granular process tree analysis." : "The script runs remotely via SSH, collects metrics, checks open ports, and then deletes itself."} 
     Output should show the script initialization, the scan phases (CPU, Memory, Network, FS), findings, and final cleanup log.
     Provide the output as raw terminal text.`,
   });
