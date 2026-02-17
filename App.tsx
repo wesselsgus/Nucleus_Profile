@@ -100,6 +100,28 @@ const App: React.FC = () => {
     }, 1500);
   };
 
+  // Registry Editor Functions
+  const addHost = () => {
+    const newHost: Host = {
+      id: `h-${Date.now()}`,
+      name: 'NEW-NODE-UPLINK',
+      ip: '0.0.0.0',
+      status: 'online',
+      region: 'af-south-1'
+    };
+    setHosts(prev => [...prev, newHost]);
+    addLine(`SYSTEM: New node ${newHost.id} appended to tactical registry.`, 'success');
+  };
+
+  const updateHost = (id: string, updates: Partial<Host>) => {
+    setHosts(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
+  };
+
+  const removeHost = (id: string) => {
+    setHosts(prev => prev.filter(h => h.id !== id));
+    addLine(`SYSTEM: Node ${id} purged from registry.`, 'error');
+  };
+
   const runTroubleshooting = (host: Host, command: string) => {
     handleAction(async () => {
       addLine(`$ ssh ${currentUser}@${host.ip} "${command}"`, 'command');
@@ -262,6 +284,74 @@ const App: React.FC = () => {
         <span className="text-2xl font-black mb-1">[ 3 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">WEB VULN</span>
         <div className="absolute bottom-2 right-2 text-[8px] opacity-30 font-mono">OWASP_TASTICAL</div>
+      </button>
+    </div>
+  );
+
+  const renderConfigMenu = () => (
+    <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
+      <div className="flex justify-between items-center border-b border-green-800 pb-2">
+        <h2 className="text-xl font-bold uppercase tracking-widest text-yellow-500">Infrastructure Config Vault</h2>
+        <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
+      </div>
+      <div className="overflow-y-auto max-h-[50vh] border border-green-900/30">
+        <table className="w-full text-left text-[10px] font-mono border-collapse">
+          <thead className="sticky top-0 bg-black z-10">
+            <tr className="border-b border-green-900 text-green-800 uppercase bg-green-950/20">
+              <th className="p-2">Name</th>
+              <th className="p-2">IP Address</th>
+              <th className="p-2">Region</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {hosts.map(host => (
+              <tr key={host.id} className="border-b border-green-900/30 hover:bg-green-900/10">
+                <td className="p-2">
+                  <input 
+                    value={host.name} 
+                    onChange={e => updateHost(host.id, { name: e.target.value })}
+                    className="bg-transparent border-b border-transparent focus:border-green-500 focus:outline-none w-full"
+                  />
+                </td>
+                <td className="p-2">
+                  <input 
+                    value={host.ip} 
+                    onChange={e => updateHost(host.id, { ip: e.target.value })}
+                    className="bg-transparent border-b border-transparent focus:border-green-500 focus:outline-none w-full"
+                  />
+                </td>
+                <td className="p-2">
+                  <select 
+                    value={host.region} 
+                    onChange={e => updateHost(host.id, { region: e.target.value })}
+                    className="bg-black border border-green-900 focus:outline-none"
+                  >
+                    <option value="us-east-1">us-east-1</option>
+                    <option value="us-west-2">us-west-2</option>
+                    <option value="eu-west-1">eu-west-1</option>
+                    <option value="af-south-1">af-south-1</option>
+                  </select>
+                </td>
+                <td className="p-2">
+                  <button 
+                    onClick={() => updateHost(host.id, { status: host.status === 'online' ? 'offline' : 'online' })}
+                    className={`px-2 py-0.5 border ${host.status === 'online' ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
+                  >
+                    {host.status.toUpperCase()}
+                  </button>
+                </td>
+                <td className="p-2">
+                  <button onClick={() => removeHost(host.id)} className="text-red-700 hover:text-red-400 font-bold">[ DELETE ]</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button onClick={addHost} className="w-full py-2 border border-dashed border-green-700 hover:border-green-400 text-green-700 hover:text-green-400 font-mono text-[10px] uppercase">
+        + Add New Infrastructure Node
       </button>
     </div>
   );
@@ -466,6 +556,7 @@ const App: React.FC = () => {
         {menuState === MenuState.JUMPHOSTS && renderJumphostsMenu()}
         {menuState === MenuState.SERVER_SCAN && renderServerScanMenu()}
         {menuState === MenuState.WEB_SCAN && renderWebScanMenu()}
+        {menuState === MenuState.CONFIG && renderConfigMenu()}
         {menuState === MenuState.EXECUTING && (
           <div className="p-10 border border-green-500 bg-black flex flex-col items-center justify-center gap-4 shadow-[0_0_30px_rgba(0,255,65,0.1)]">
              <div className="relative">
