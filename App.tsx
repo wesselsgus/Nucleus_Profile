@@ -2,7 +2,7 @@
 // Add React import to fix namespace errors for React.FC and React.FormEvent
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MenuState, TerminalLine, Host } from './types';
-import { NUCLEUS_HOSTS, OWASP_TOOLS } from './constants';
+import { NUCLEUS_HOSTS, OWASP_TOOLS, RAW_ETC_HOSTS } from './constants';
 import { simulateTroubleshooting, simulateServerScan, simulateWebScan } from './services/gemini';
 
 type NucleusUser = 'admin' | 'gustavw' | 'stephenc';
@@ -13,7 +13,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [webUrl, setWebUrl] = useState('');
   const [commandInput, setCommandInput] = useState('');
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['us-east-1', 'Vulnerability']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['us-east-1', 'af-south-1', 'Vulnerability']));
   const [showUserMenu, setShowUserMenu] = useState(false);
   
   // Identity State
@@ -86,6 +86,35 @@ const App: React.FC = () => {
     setCurrentUser(user);
     setShowUserMenu(false);
     addLine(`LOGIN: Initializing secure context for ${user}...`, 'success');
+  };
+
+  // Bulk Import Function
+  const importFromEtcHosts = () => {
+    const names = Array.from(new Set(RAW_ETC_HOSTS.split('\n').map(n => n.trim()).filter(n => n.length > 0)));
+    let addedCount = 0;
+    
+    const newHosts: Host[] = [...hosts];
+    
+    names.forEach((name, index) => {
+      if (!newHosts.find(h => h.name === name)) {
+        newHosts.push({
+          id: `h-etc-${Date.now()}-${index}`,
+          name: name,
+          ip: `10.10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+          status: 'online',
+          region: 'af-south-1'
+        });
+        addedCount++;
+      }
+    });
+    
+    if (addedCount > 0) {
+      setHosts(newHosts);
+      addLine(`BULK_SYNC: Successfully ingested ${addedCount} hosts from /etc/hosts.`, 'success');
+      addLine(`REGION_ASSIGN: All new nodes routed to af-south-1 cluster.`, 'info');
+    } else {
+      addLine(`BULK_SYNC: No new hosts detected. Registry is up to date.`, 'info');
+    }
   };
 
   // Host Management Functions
@@ -172,11 +201,15 @@ const App: React.FC = () => {
         addLine("  ping [host]    - Ping a specific host");
         addLine("  disk [host]    - Check disk usage on host");
         addLine("  scan [host]    - Run full security scan on host");
+        addLine("  sync           - Import hosts from /etc/hosts");
         addLine("  menu [main|jump|scan|web|config] - Switch menu view");
         break;
       case 'ls':
         addLine("HOST REGISTRY:", "success");
         hosts.forEach(h => addLine(`  ${h.name.padEnd(20)} ${h.ip.padEnd(15)} [${h.status}]`));
+        break;
+      case 'sync':
+        importFromEtcHosts();
         break;
       case 'menu':
         const target = arg1?.toUpperCase() as keyof typeof MenuState;
@@ -204,15 +237,15 @@ const App: React.FC = () => {
 
   const renderMainMenu = () => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border border-green-900 bg-black/40">
-      <button onClick={() => setMenuState(MenuState.JUMPHOSTS)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center">
+      <button onClick={() => setMenuState(MenuState.JUMPHOSTS)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 1 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">JUMPHOSTS</span>
       </button>
-      <button onClick={() => setMenuState(MenuState.SERVER_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center">
+      <button onClick={() => setMenuState(MenuState.SERVER_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 2 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">SERVER SCAN</span>
       </button>
-      <button onClick={() => setMenuState(MenuState.WEB_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center">
+      <button onClick={() => setMenuState(MenuState.WEB_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 3 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">WEB VULN</span>
       </button>
@@ -222,13 +255,21 @@ const App: React.FC = () => {
   const renderConfigMenu = () => (
     <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
       <div className="flex justify-between items-center border-b border-green-800 pb-2">
-        <h2 className="text-xl font-bold uppercase tracking-widest text-yellow-500">Infrastructure Config Vault</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-bold uppercase tracking-widest text-yellow-500">Infrastructure Config Vault</h2>
+          <button 
+            onClick={importFromEtcHosts}
+            className="px-3 py-1 border border-yellow-500 text-yellow-500 text-[10px] uppercase font-bold animate-pulse hover:bg-yellow-500 hover:text-black transition-colors"
+          >
+            [ SYNC /ETC/HOSTS ]
+          </button>
+        </div>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-y-auto max-h-[50vh] border border-green-900/30">
         <table className="w-full text-left text-xs font-mono border-collapse">
-          <thead>
-            <tr className="border-b border-green-900 text-green-800 uppercase">
+          <thead className="sticky top-0 bg-black z-10">
+            <tr className="border-b border-green-900 text-green-800 uppercase bg-green-950/20">
               <th className="p-2">Name</th>
               <th className="p-2">IP Address</th>
               <th className="p-2">Region</th>
@@ -262,7 +303,7 @@ const App: React.FC = () => {
                     <option value="us-east-1">us-east-1</option>
                     <option value="us-west-2">us-west-2</option>
                     <option value="eu-west-1">eu-west-1</option>
-                    <option value="af-south-1">af-south-1 (South Africa)</option>
+                    <option value="af-south-1">af-south-1</option>
                   </select>
                 </td>
                 <td className="p-2">
@@ -281,9 +322,11 @@ const App: React.FC = () => {
           </tbody>
         </table>
       </div>
-      <button onClick={addHost} className="w-full py-2 border border-dashed border-green-700 hover:border-green-400 text-green-700 hover:text-green-400 font-mono text-xs uppercase mt-2">
-        + Add New Infrastructure Node
-      </button>
+      <div className="flex gap-2">
+        <button onClick={addHost} className="flex-grow py-2 border border-dashed border-green-700 hover:border-green-400 text-green-700 hover:text-green-400 font-mono text-xs uppercase">
+          + Add New Infrastructure Node
+        </button>
+      </div>
     </div>
   );
 
@@ -293,7 +336,7 @@ const App: React.FC = () => {
         <h2 className="text-xl font-bold uppercase tracking-widest">Select Target Host</h2>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
-      <div className="space-y-4 overflow-y-auto max-h-[40vh] pr-2">
+      <div className="space-y-4 overflow-y-auto max-h-[45vh] pr-2">
         {(Object.entries(hostsByRegion) as [string, Host[]][]).map(([region, regionHosts]) => (
           <div key={region} className="border border-green-900/50">
             <button onClick={() => toggleSection(region)} className="w-full flex justify-between items-center p-2 bg-green-900/10 hover:bg-green-900/20 transition-colors font-mono text-xs uppercase tracking-wider border-b border-green-900/50">
@@ -301,23 +344,18 @@ const App: React.FC = () => {
               <span className="font-bold">{expandedSections.has(region) ? '[ - ]' : '[ + ]'}</span>
             </button>
             {expandedSections.has(region) && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
                 {regionHosts.map(host => (
-                  <div key={host.id} className="relative overflow-hidden border border-green-800 p-4 cursor-pointer group hover:border-green-400 h-24 flex flex-col justify-center bg-black/40">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${host.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`} />
-                      <span className="text-lg font-bold tracking-tight">{host.name}</span>
+                  <div key={host.id} className="relative overflow-hidden border border-green-800 p-3 cursor-pointer group hover:border-green-400 h-20 flex flex-col justify-center bg-black/40">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${host.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`} />
+                      <span className="text-xs font-bold tracking-tight truncate">{host.name}</span>
                     </div>
-                    <div className="absolute inset-0 bg-black/95 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out p-3 flex flex-col justify-between border-t border-green-400 z-10">
-                      <div className="flex justify-between items-center text-green-500">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-green-700 leading-none mb-1 font-mono uppercase">ADDR</span>
-                          <span className="text-xs font-mono">{host.ip}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 mt-2">
-                        <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'ping -c 4 8.8.8.8'); }} className="flex-grow py-1 text-[9px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">ping</button>
-                        <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'df -h'); }} className="flex-grow py-1 text-[9px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">disk</button>
+                    <div className="absolute inset-0 bg-black/95 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out p-2 flex flex-col justify-between border-t border-green-400 z-10">
+                      <span className="text-[10px] font-mono text-green-500 truncate">{host.ip}</span>
+                      <div className="flex gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'ping -c 4 8.8.8.8'); }} className="flex-grow py-0.5 text-[8px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">ping</button>
+                        <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'df -h'); }} className="flex-grow py-0.5 text-[8px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">disk</button>
                       </div>
                     </div>
                   </div>
@@ -336,7 +374,7 @@ const App: React.FC = () => {
         <h2 className="text-xl font-bold uppercase tracking-widest">Server Scan Registry</h2>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
-      <div className="space-y-4 overflow-y-auto max-h-[40vh] pr-2">
+      <div className="space-y-4 overflow-y-auto max-h-[45vh] pr-2">
         {(Object.entries(hostsByRegion) as [string, Host[]][]).map(([region, regionHosts]) => (
           <div key={region} className="border border-green-900/50">
             <button onClick={() => toggleSection(`scan-${region}`)} className="w-full flex justify-between items-center p-2 bg-green-900/10 hover:bg-green-900/20 transition-colors font-mono text-xs uppercase tracking-wider border-b border-green-900/50">
@@ -344,11 +382,11 @@ const App: React.FC = () => {
               <span className="font-bold">{expandedSections.has(`scan-${region}`) ? '[ - ]' : '[ + ]'}</span>
             </button>
             {expandedSections.has(`scan-${region}`) && (
-              <div className="flex flex-wrap gap-2 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
                 {regionHosts.map(host => (
-                  <button key={host.id} onClick={() => runFullScan(host)} className="px-4 py-2 border border-green-500 hover:bg-green-500 hover:text-black text-xs font-mono uppercase transition-all flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    INJECT: {host.name}
+                  <button key={host.id} onClick={() => runFullScan(host)} className="px-2 py-1.5 border border-green-500 hover:bg-green-500 hover:text-black text-[10px] font-mono uppercase transition-all flex items-center gap-2 truncate">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                    {host.name}
                   </button>
                 ))}
               </div>
