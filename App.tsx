@@ -2,7 +2,7 @@
 // Add React import to fix namespace errors for React.FC and React.FormEvent
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MenuState, TerminalLine, Host } from './types';
-import { NUCLEUS_HOSTS, OWASP_TOOLS, RAW_ETC_HOSTS } from './constants';
+import { NUCLEUS_HOSTS, SERVER_TOOLS, WEB_TOOLS } from './constants';
 import { simulateTroubleshooting, simulateServerScan, simulateWebScan } from './services/gemini';
 
 type NucleusUser = 'admin' | 'gustavw' | 'stephenc';
@@ -13,8 +13,10 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [webUrl, setWebUrl] = useState('');
   const [commandInput, setCommandInput] = useState('');
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['us-east-1', 'af-south-1', 'Vulnerability']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['af-south-1', 'Vulnerability']));
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   
   // Identity State
   const [currentUser, setCurrentUser] = useState<NucleusUser>(() => {
@@ -51,13 +53,15 @@ const App: React.FC = () => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [lines]);
 
+  // Initial Boot Sequence
   useEffect(() => {
-    setLines([]); // Clear on boot/switch for clean feel
-    addLine(`SYSTEM INITIALIZED. NUCLEUS OPS CONSOLE v2.5.0`, "success");
-    addLine(`AUTHENTICATED AS: ${currentUser.toUpperCase()}`, "info");
-    addLine("Type 'help' for available commands or use the menu below.");
+    if (!isLoggedIn) return;
+    setLines([]); 
+    addLine(`SESSION ESTABLISHED: ${currentUser.toUpperCase()}@NUCLEUS.T6F.CO.ZA`, "success");
+    addLine(`SYSTEM INITIALIZED. OPS CONSOLE v2.7.4_AFRICA`, "info");
+    addLine("Type 'help' for available commands or use tactical menu.");
     inputRef.current?.focus();
-  }, [addLine, currentUser]);
+  }, [addLine, currentUser, isLoggedIn]);
 
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {
@@ -82,61 +86,17 @@ const App: React.FC = () => {
 
   const switchUser = (user: NucleusUser) => {
     if (user === currentUser) return;
-    addLine(`LOGOUT: Session ended for ${currentUser}`, 'error');
     setCurrentUser(user);
     setShowUserMenu(false);
-    addLine(`LOGIN: Initializing secure context for ${user}...`, 'success');
+    setIsLoggedIn(false); // Force re-login sequence
   };
 
-  // Bulk Import Function
-  const importFromEtcHosts = () => {
-    const names = Array.from(new Set(RAW_ETC_HOSTS.split('\n').map(n => n.trim()).filter(n => n.length > 0)));
-    let addedCount = 0;
-    
-    const newHosts: Host[] = [...hosts];
-    
-    names.forEach((name, index) => {
-      if (!newHosts.find(h => h.name === name)) {
-        newHosts.push({
-          id: `h-etc-${Date.now()}-${index}`,
-          name: name,
-          ip: `10.10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-          status: 'online',
-          region: 'af-south-1'
-        });
-        addedCount++;
-      }
-    });
-    
-    if (addedCount > 0) {
-      setHosts(newHosts);
-      addLine(`BULK_SYNC: Successfully ingested ${addedCount} hosts from /etc/hosts.`, 'success');
-      addLine(`REGION_ASSIGN: All new nodes routed to af-south-1 cluster.`, 'info');
-    } else {
-      addLine(`BULK_SYNC: No new hosts detected. Registry is up to date.`, 'info');
-    }
-  };
-
-  // Host Management Functions
-  const addHost = () => {
-    const newHost: Host = {
-      id: `h-${Date.now()}`,
-      name: 'new-host',
-      ip: '0.0.0.0',
-      status: 'online',
-      region: 'us-east-1'
-    };
-    setHosts([...hosts, newHost]);
-    addLine(`SYSTEM: New node ${newHost.id} added to registry.`, 'success');
-  };
-
-  const updateHost = (id: string, updates: Partial<Host>) => {
-    setHosts(hosts.map(h => h.id === id ? { ...h, ...updates } : h));
-  };
-
-  const removeHost = (id: string) => {
-    setHosts(hosts.filter(h => h.id !== id));
-    addLine(`SYSTEM: Node ${id} decommissioned from registry.`, 'error');
+  const handleLogin = () => {
+    setIsConnecting(true);
+    setTimeout(() => {
+      setIsLoggedIn(true);
+      setIsConnecting(false);
+    }, 1500);
   };
 
   const runTroubleshooting = (host: Host, command: string) => {
@@ -147,19 +107,18 @@ const App: React.FC = () => {
     });
   };
 
-  const runFullScan = (host: Host) => {
+  const runFullScan = (host: Host, tool: string) => {
     setMenuState(MenuState.EXECUTING);
     handleAction(async () => {
-      addLine(`$ curl -sSL https://nucleus.internal/scripts/scan.sh | bash -s -- --user ${currentUser} --host ${host.name}`, 'command');
-      addLine(`Establishing encrypted tunnel to ${host.ip}...`, 'info');
-      const result = await simulateServerScan(host.name);
+      addLine(`$ nucleus-cli scan --node ${host.id} --tactical-tool "${tool}"`, 'command');
+      addLine(`Initiating remote telemetry on ${host.ip}...`, 'info');
+      const result = await simulateServerScan(`${host.name} via ${tool}`);
       const chunks = result.split('\n');
       for (const chunk of chunks) {
         addLine(chunk, 'output');
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 80));
       }
-      addLine(`Scan script /tmp/nucleus_scan_${host.id}.sh removed successfully.`, 'success');
-      addLine(`Connection to ${host.name} closed.`, 'info');
+      addLine(`Analysis complete. Report cached in local registry.`, 'success');
       setMenuState(MenuState.MAIN);
     });
   };
@@ -171,7 +130,7 @@ const App: React.FC = () => {
     }
     setMenuState(MenuState.EXECUTING);
     handleAction(async () => {
-      addLine(`$ ${tool.toLowerCase().replace(' ', '_')} --target ${url} --operator ${currentUser}`, 'command');
+      addLine(`$ ${tool.toLowerCase().replace(/[\s\(\)]/g, '_')} --target ${url} --operator ${currentUser}`, 'command');
       const result = await simulateWebScan(url, tool);
       result.split('\n').forEach(line => addLine(line, 'output'));
       setMenuState(MenuState.MAIN);
@@ -194,22 +153,21 @@ const App: React.FC = () => {
       case 'whoami':
         addLine(currentUser, "success");
         break;
+      case 'clear':
+        setLines([]);
+        break;
       case 'help':
         addLine("AVAILABLE COMMANDS:", "success");
-        addLine("  whoami         - Show current active user");
-        addLine("  ls             - List all hosts");
-        addLine("  ping [host]    - Ping a specific host");
-        addLine("  disk [host]    - Check disk usage on host");
-        addLine("  scan [host]    - Run full security scan on host");
-        addLine("  sync           - Import hosts from /etc/hosts");
-        addLine("  menu [main|jump|scan|web|config] - Switch menu view");
+        addLine("  whoami         - Current operator identity");
+        addLine("  ls             - List regional node registry");
+        addLine("  clear          - Flush console buffer");
+        addLine("  ping [host]    - ICMP echo to node");
+        addLine("  scan [host]    - Execute server security audit");
+        addLine("  menu [state]   - Jump to [main|jump|scan|web|config]");
         break;
       case 'ls':
-        addLine("HOST REGISTRY:", "success");
-        hosts.forEach(h => addLine(`  ${h.name.padEnd(20)} ${h.ip.padEnd(15)} [${h.status}]`));
-        break;
-      case 'sync':
-        importFromEtcHosts();
+        addLine("INFRASTRUCTURE REGISTRY (ACTIVE):", "success");
+        hosts.forEach(h => addLine(`  ${h.name.padEnd(25)} ${h.ip.padEnd(15)} [${h.status}]`));
         break;
       case 'menu':
         const target = arg1?.toUpperCase() as keyof typeof MenuState;
@@ -218,11 +176,11 @@ const App: React.FC = () => {
         break;
       default:
         const host = hosts.find(h => h.name === arg1 || h.ip === arg1);
-        if (host && ['ping', 'disk', 'scan'].includes(base)) {
-           if (base === 'scan') runFullScan(host);
-           else runTroubleshooting(host, base === 'ping' ? 'ping -c 4 8.8.8.8' : 'df -h');
+        if (host && ['ping', 'scan'].includes(base)) {
+           if (base === 'scan') runFullScan(host, "Standard Audit");
+           else runTroubleshooting(host, 'ping -c 4 8.8.8.8');
         } else {
-           addLine(`Command not recognized or host not found.`, "error");
+           addLine(`Command unrecognized. Reference 'help' for tactical usage.`, "error");
         }
     }
   };
@@ -235,124 +193,115 @@ const App: React.FC = () => {
     }, {} as Record<string, Host[]>);
   }, [hosts]);
 
+  const renderLogin = () => (
+    <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-4">
+      <div className="max-w-md w-full border border-green-500 bg-black p-8 shadow-[0_0_50px_rgba(0,255,65,0.15)] font-mono">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-black tracking-tighter text-green-500 uppercase mb-2">NUCLEUS AUTH</h2>
+          <div className="text-[10px] text-green-800 uppercase tracking-widest border-y border-green-900 py-1">Secure Operations Portal</div>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-green-700 uppercase">Gateway Node</span>
+            <div className="text-sm border border-green-900 p-2 bg-green-950/10 text-blue-400">nucleus.t6f.co.za</div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-green-700 uppercase">Active Identity</span>
+            <select 
+              value={currentUser}
+              onChange={(e) => setCurrentUser(e.target.value as NucleusUser)}
+              className="text-sm border border-green-900 p-2 bg-black text-green-400 w-full focus:outline-none focus:border-green-500 appearance-none cursor-pointer uppercase font-bold"
+            >
+              <option value="admin">admin</option>
+              <option value="gustavw">gustavw</option>
+              <option value="stephenc">stephenc</option>
+            </select>
+          </div>
+          
+          <button 
+            disabled={isConnecting}
+            onClick={handleLogin}
+            className="w-full py-4 border border-green-500 hover:bg-green-500 hover:text-black transition-all font-black text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-wait relative overflow-hidden group"
+          >
+            {isConnecting ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                Negotiating Handshake...
+              </span>
+            ) : (
+              <span>[ INITIALIZE SESSION ]</span>
+            )}
+            <div className="absolute inset-0 bg-green-500/10 group-hover:bg-transparent transition-colors" />
+          </button>
+          
+          <div className="text-[8px] text-green-900 leading-relaxed text-center opacity-60">
+            SYSTEM UNDER CONTINUOUS MONITORING. PROPRIETARY FIRMWARE DETECTED.
+            <br />LOGOUT PREVIOUS SESSIONS BEFORE ENTRY.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderMainMenu = () => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border border-green-900 bg-black/40">
       <button onClick={() => setMenuState(MenuState.JUMPHOSTS)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 1 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">JUMPHOSTS</span>
+        <div className="absolute bottom-2 right-2 text-[8px] opacity-30 font-mono">REGISTRY_HUD</div>
       </button>
       <button onClick={() => setMenuState(MenuState.SERVER_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 2 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">SERVER SCAN</span>
+        <div className="absolute bottom-2 right-2 text-[8px] opacity-30 font-mono">SECURITY_AUDIT</div>
       </button>
       <button onClick={() => setMenuState(MenuState.WEB_SCAN)} className="p-6 border border-green-500 hover:bg-green-500 hover:text-black transition-all flex flex-col items-center group relative h-36 justify-center text-center">
         <span className="text-2xl font-black mb-1">[ 3 ]</span>
         <span className="font-bold tracking-widest text-xs uppercase">WEB VULN</span>
+        <div className="absolute bottom-2 right-2 text-[8px] opacity-30 font-mono">OWASP_TASTICAL</div>
       </button>
-    </div>
-  );
-
-  const renderConfigMenu = () => (
-    <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
-      <div className="flex justify-between items-center border-b border-green-800 pb-2">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold uppercase tracking-widest text-yellow-500">Infrastructure Config Vault</h2>
-          <button 
-            onClick={importFromEtcHosts}
-            className="px-3 py-1 border border-yellow-500 text-yellow-500 text-[10px] uppercase font-bold animate-pulse hover:bg-yellow-500 hover:text-black transition-colors"
-          >
-            [ SYNC /ETC/HOSTS ]
-          </button>
-        </div>
-        <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
-      </div>
-      <div className="overflow-y-auto max-h-[50vh] border border-green-900/30">
-        <table className="w-full text-left text-xs font-mono border-collapse">
-          <thead className="sticky top-0 bg-black z-10">
-            <tr className="border-b border-green-900 text-green-800 uppercase bg-green-950/20">
-              <th className="p-2">Name</th>
-              <th className="p-2">IP Address</th>
-              <th className="p-2">Region</th>
-              <th className="p-2">Status</th>
-              <th className="p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {hosts.map(host => (
-              <tr key={host.id} className="border-b border-green-900/30 hover:bg-green-900/10">
-                <td className="p-2">
-                  <input 
-                    value={host.name} 
-                    onChange={e => updateHost(host.id, { name: e.target.value })}
-                    className="bg-transparent border-b border-transparent focus:border-green-500 focus:outline-none w-full"
-                  />
-                </td>
-                <td className="p-2">
-                  <input 
-                    value={host.ip} 
-                    onChange={e => updateHost(host.id, { ip: e.target.value })}
-                    className="bg-transparent border-b border-transparent focus:border-green-500 focus:outline-none w-full"
-                  />
-                </td>
-                <td className="p-2">
-                  <select 
-                    value={host.region} 
-                    onChange={e => updateHost(host.id, { region: e.target.value })}
-                    className="bg-black border border-green-900 focus:outline-none"
-                  >
-                    <option value="us-east-1">us-east-1</option>
-                    <option value="us-west-2">us-west-2</option>
-                    <option value="eu-west-1">eu-west-1</option>
-                    <option value="af-south-1">af-south-1</option>
-                  </select>
-                </td>
-                <td className="p-2">
-                  <button 
-                    onClick={() => updateHost(host.id, { status: host.status === 'online' ? 'offline' : 'online' })}
-                    className={`px-2 py-0.5 border ${host.status === 'online' ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
-                  >
-                    {host.status.toUpperCase()}
-                  </button>
-                </td>
-                <td className="p-2">
-                  <button onClick={() => removeHost(host.id)} className="text-red-700 hover:text-red-400 font-bold">[ DELETE ]</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={addHost} className="flex-grow py-2 border border-dashed border-green-700 hover:border-green-400 text-green-700 hover:text-green-400 font-mono text-xs uppercase">
-          + Add New Infrastructure Node
-        </button>
-      </div>
     </div>
   );
 
   const renderJumphostsMenu = () => (
     <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
       <div className="flex justify-between items-center border-b border-green-800 pb-2">
-        <h2 className="text-xl font-bold uppercase tracking-widest">Select Target Host</h2>
+        <h2 className="text-xl font-bold uppercase tracking-widest">Global Node Registry</h2>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
-      <div className="space-y-4 overflow-y-auto max-h-[45vh] pr-2">
+      <div className="space-y-4 overflow-y-auto max-h-[48vh] pr-2">
         {(Object.entries(hostsByRegion) as [string, Host[]][]).map(([region, regionHosts]) => (
           <div key={region} className="border border-green-900/50">
             <button onClick={() => toggleSection(region)} className="w-full flex justify-between items-center p-2 bg-green-900/10 hover:bg-green-900/20 transition-colors font-mono text-xs uppercase tracking-wider border-b border-green-900/50">
-              <span>{region} ({regionHosts.length} nodes)</span>
+              <span className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                {region} <span className="text-green-800">[{regionHosts.length} NODES]</span>
+              </span>
               <span className="font-bold">{expandedSections.has(region) ? '[ - ]' : '[ + ]'}</span>
             </button>
             {expandedSections.has(region) && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 p-2 animate-in fade-in slide-in-from-top-1 duration-200">
                 {regionHosts.map(host => (
-                  <div key={host.id} className="relative overflow-hidden border border-green-800 p-3 cursor-pointer group hover:border-green-400 h-20 flex flex-col justify-center bg-black/40">
+                  <div key={host.id} className="relative overflow-hidden border border-green-800 p-3 cursor-pointer group hover:border-green-400 h-16 flex flex-col justify-center bg-black/40">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${host.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`} />
-                      <span className="text-xs font-bold tracking-tight truncate">{host.name}</span>
+                      <div className={`w-1.5 h-1.5 rounded-full ${host.status === 'online' ? 'bg-green-500 shadow-[0_0_6px_#22c55e]' : 'bg-red-500 shadow-[0_0_6px_#ef4444]'}`} />
+                      <span className="text-[10px] font-bold tracking-tight truncate uppercase leading-none">{host.name}</span>
                     </div>
-                    <div className="absolute inset-0 bg-black/95 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out p-2 flex flex-col justify-between border-t border-green-400 z-10">
-                      <span className="text-[10px] font-mono text-green-500 truncate">{host.ip}</span>
+                    
+                    {/* ENHANCED HOVER HUD */}
+                    <div className="absolute inset-0 bg-black/95 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out p-2 flex flex-col justify-between border-t border-green-400 z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.8)]">
+                      <div className="flex flex-col leading-tight">
+                        <div className="flex justify-between items-center border-b border-green-900/50 pb-0.5 mb-1">
+                          <span className="text-[7px] text-green-700 font-mono uppercase">Region</span>
+                          <span className="text-[8px] text-blue-400 font-mono uppercase">{host.region}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[7px] text-green-700 font-mono uppercase">Internal IP</span>
+                          <span className="text-[9px] text-green-500 font-mono">{host.ip}</span>
+                        </div>
+                      </div>
                       <div className="flex gap-1">
                         <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'ping -c 4 8.8.8.8'); }} className="flex-grow py-0.5 text-[8px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">ping</button>
                         <button onClick={(e) => { e.stopPropagation(); runTroubleshooting(host, 'df -h'); }} className="flex-grow py-0.5 text-[8px] border border-green-600 hover:bg-green-500 hover:text-black transition-colors uppercase font-bold font-mono">disk</button>
@@ -371,23 +320,32 @@ const App: React.FC = () => {
   const renderServerScanMenu = () => (
     <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
       <div className="flex justify-between items-center border-b border-green-800 pb-2">
-        <h2 className="text-xl font-bold uppercase tracking-widest">Server Scan Registry</h2>
+        <h2 className="text-xl font-bold uppercase tracking-widest text-green-400">Tactical Server Audits</h2>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
       <div className="space-y-4 overflow-y-auto max-h-[45vh] pr-2">
         {(Object.entries(hostsByRegion) as [string, Host[]][]).map(([region, regionHosts]) => (
           <div key={region} className="border border-green-900/50">
             <button onClick={() => toggleSection(`scan-${region}`)} className="w-full flex justify-between items-center p-2 bg-green-900/10 hover:bg-green-900/20 transition-colors font-mono text-xs uppercase tracking-wider border-b border-green-900/50">
-              <span>REGIONAL DEPLOYMENT: {region}</span>
+              <span>{region} DEPLOYMENT ZONE</span>
               <span className="font-bold">{expandedSections.has(`scan-${region}`) ? '[ - ]' : '[ + ]'}</span>
             </button>
             {expandedSections.has(`scan-${region}`) && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="p-3 animate-in fade-in slide-in-from-top-1 duration-200 space-y-4">
                 {regionHosts.map(host => (
-                  <button key={host.id} onClick={() => runFullScan(host)} className="px-2 py-1.5 border border-green-500 hover:bg-green-500 hover:text-black text-[10px] font-mono uppercase transition-all flex items-center gap-2 truncate">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                    {host.name}
-                  </button>
+                  <div key={host.id} className="flex flex-col gap-2 border-b border-green-900/30 pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-black uppercase text-green-400">{host.name} <span className="text-green-800 ml-2">({host.ip})</span></div>
+                      <div className="text-[8px] font-mono text-green-900 uppercase">Ready for Injection</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {SERVER_TOOLS.map(tool => (
+                        <button key={tool} onClick={() => runFullScan(host, tool)} className="px-2 py-1 border border-green-700 hover:border-green-500 hover:text-black text-[9px] font-mono uppercase transition-all bg-green-950/10">
+                          {tool}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -400,37 +358,30 @@ const App: React.FC = () => {
   const renderWebScanMenu = () => (
     <div className="flex flex-col gap-4 p-4 border border-green-900 bg-black/60">
       <div className="flex justify-between items-center border-b border-green-800 pb-2">
-        <h2 className="text-xl font-bold uppercase tracking-widest">Web Security Analysis</h2>
+        <h2 className="text-xl font-bold uppercase tracking-widest text-blue-500">OWASP Tactical Analysis</h2>
         <button onClick={() => setMenuState(MenuState.MAIN)} className="text-xs hover:underline text-green-700 hover:text-green-400 font-mono">[ BACK ]</button>
       </div>
-      <input 
-        type="text" value={webUrl} onChange={(e) => setWebUrl(e.target.value)} placeholder="https://target-domain.internal"
-        className="bg-black border border-green-500 text-green-500 px-4 py-2 focus:outline-none placeholder:text-green-900 font-mono"
-      />
-      <div className="space-y-4 overflow-y-auto max-h-[40vh] pr-2">
-        {[{ name: 'Vulnerability', tools: ['ZAP Scanner', 'Nikto'] }, { name: 'Database', tools: ['Sqlmap (Automated)'] }].map(category => (
-          <div key={category.name} className="border border-green-900/50">
-            <button onClick={() => toggleSection(category.name)} className="w-full flex justify-between items-center p-2 bg-green-900/10 hover:bg-green-900/20 transition-colors font-mono text-xs uppercase tracking-wider border-b border-green-900/50">
-              <span>{category.name} Suite</span>
-              <span className="font-bold">{expandedSections.has(category.name) ? '[ - ]' : '[ + ]'}</span>
-            </button>
-            {expandedSections.has(category.name) && (
-              <div className="grid grid-cols-2 gap-2 p-3">
-                {category.tools.map(tool => (
-                  <button key={tool} onClick={() => runWebScan(webUrl, tool)} className="p-2 border border-green-500 hover:bg-green-500 hover:text-black text-[10px] font-mono uppercase text-center">
-                    {tool}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-green-700 uppercase ml-1">Analysis Target</span>
+        <input 
+          type="text" value={webUrl} onChange={(e) => setWebUrl(e.target.value)} placeholder="https://target-endpoint.internal"
+          className="bg-black border border-green-500 text-green-500 px-4 py-2 focus:outline-none placeholder:text-green-900 font-mono mb-4 shadow-[inset_0_0_10px_rgba(0,255,65,0.05)]"
+        />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 overflow-y-auto max-h-[40vh] pr-2">
+        {WEB_TOOLS.map(tool => (
+          <button key={tool} onClick={() => runWebScan(webUrl, tool)} className="p-3 border border-green-700 hover:border-green-400 hover:bg-green-500 hover:text-black text-[9px] font-mono uppercase text-center flex flex-col items-center justify-center min-h-[70px] transition-all bg-green-950/5">
+            {tool}
+          </button>
         ))}
       </div>
     </div>
   );
 
   return (
-    <div className="h-screen flex flex-col p-4 md:p-8 max-w-7xl mx-auto overflow-hidden bg-[#050505]">
+    <div className="h-screen flex flex-col p-4 md:p-8 max-w-7xl mx-auto overflow-hidden bg-[#050505] text-[#00ff41]">
+      {!isLoggedIn && renderLogin()}
+      
       <header className="flex justify-between items-start mb-4 border-b border-green-500 pb-2 relative">
         <div className="flex items-start gap-4">
           <div className="relative group">
@@ -445,21 +396,17 @@ const App: React.FC = () => {
             </button>
             {showUserMenu && (
               <div className="absolute top-14 left-0 w-32 bg-black border border-green-500 z-50 animate-in fade-in zoom-in-95 duration-100 shadow-[0_0_15px_rgba(0,255,65,0.2)]">
-                <button onClick={() => switchUser('admin')} className={`w-full text-left p-2 text-[10px] font-mono uppercase hover:bg-green-500 hover:text-black ${currentUser === 'admin' ? 'bg-green-900/30' : ''}`}>
-                  [ admin ]
-                </button>
-                <button onClick={() => switchUser('gustavw')} className={`w-full text-left p-2 text-[10px] font-mono uppercase hover:bg-green-500 hover:text-black ${currentUser === 'gustavw' ? 'bg-green-900/30' : ''}`}>
-                  [ gustavw ]
-                </button>
-                <button onClick={() => switchUser('stephenc')} className={`w-full text-left p-2 text-[10px] font-mono uppercase hover:bg-green-500 hover:text-black ${currentUser === 'stephenc' ? 'bg-green-900/30' : ''}`}>
-                  [ stephenc ]
-                </button>
+                {(['admin', 'gustavw', 'stephenc'] as NucleusUser[]).map(user => (
+                  <button key={user} onClick={() => switchUser(user)} className={`w-full text-left p-2 text-[10px] font-mono uppercase hover:bg-green-500 hover:text-black transition-colors ${currentUser === user ? 'bg-green-900/30' : ''}`}>
+                    [ {user} ]
+                  </button>
+                ))}
               </div>
             )}
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-black tracking-tighter uppercase">{currentUser}_OPS@NUCLEUS</h1>
-            <p className="text-[10px] text-green-400 uppercase tracking-widest">Secure Shell Environment // Identity: Verified</p>
+            <p className="text-[10px] text-green-600 uppercase tracking-widest">nucleus.t6f.co.za // SESSION_OK</p>
           </div>
         </div>
         
@@ -469,32 +416,32 @@ const App: React.FC = () => {
               onClick={() => setMenuState(MenuState.CONFIG)}
               className="text-yellow-600 hover:text-yellow-400 border border-yellow-900 px-2 py-0.5 transition-colors uppercase"
             >
-              [ SETTINGS ]
+              [ REGISTRY_EDIT ]
             </button>
-            <span className="text-white bg-green-900 px-1">ACTIVE</span>
+            <span className="text-white bg-green-950 border border-green-500 px-1 font-bold">LIVE_UPLINK</span>
           </div>
-          <div className="opacity-50">NODE_COUNT: {hosts.length} // SESSION: {Math.floor(Math.random() * 9999)}</div>
+          <div className="opacity-40 uppercase">NODES: {hosts.length} // STABLE_CHANNEL // {new Date().getFullYear()}</div>
         </div>
       </header>
 
-      <main className="flex-grow overflow-y-auto mb-4 border border-green-900/30 bg-black/40 p-4 flex flex-col relative">
+      <main className="flex-grow overflow-y-auto mb-4 border border-green-900/30 bg-black/40 p-4 flex flex-col relative shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
         <div className="space-y-1 flex-grow">
           {lines.map((line, i) => (
             <div key={i} className="flex gap-3 leading-tight animate-in fade-in slide-in-from-left-2 duration-300 font-mono">
-              <span className="opacity-40 text-[10px] whitespace-nowrap pt-1">[{line.timestamp}]</span>
-              <span className={`break-words ${line.type === 'error' ? 'text-red-500' : line.type === 'success' ? 'text-blue-400' : line.type === 'command' ? 'text-yellow-400 font-bold' : line.type === 'output' ? 'text-gray-300' : 'text-green-500'}`}>
+              <span className="opacity-30 text-[9px] whitespace-nowrap pt-1">[{line.timestamp}]</span>
+              <span className={`break-words text-sm ${line.type === 'error' ? 'text-red-500' : line.type === 'success' ? 'text-blue-400' : line.type === 'command' ? 'text-yellow-400 font-bold' : line.type === 'output' ? 'text-gray-400' : 'text-green-500'}`}>
                 {line.type === 'command' && <span className="mr-1">➜</span>}
                 {line.text}
               </span>
             </div>
           ))}
-          {isProcessing && <div className="flex gap-2 items-center text-green-400 animate-pulse mt-2 font-mono"><span className="text-[10px]">SYSTEM BUSY...</span><div className="w-1 h-4 bg-green-500 animate-bounce" /></div>}
+          {isProcessing && <div className="flex gap-2 items-center text-green-400 animate-pulse mt-2 font-mono"><span className="text-[10px]">EXECUTING_PAYLOAD...</span><div className="w-1.5 h-4 bg-green-500 animate-bounce" /></div>}
           <div ref={terminalEndRef} />
         </div>
         <div className="mt-4 border-t border-green-900/50 pt-3 flex items-center gap-2 font-mono">
           <span className="text-green-500 font-bold shrink-0">[{currentUser}@nucleus ~]$</span>
           <form onSubmit={handleCommandSubmit} className="flex-grow">
-            <input ref={inputRef} type="text" value={commandInput} onChange={(e) => setCommandInput(e.target.value)} className="bg-transparent border-none text-green-400 focus:outline-none w-full caret-green-500" autoComplete="off" spellCheck="false" autoFocus />
+            <input ref={inputRef} type="text" value={commandInput} onChange={(e) => setCommandInput(e.target.value)} className="bg-transparent border-none text-green-400 focus:outline-none w-full caret-green-500 text-sm" autoComplete="off" spellCheck="false" autoFocus />
           </form>
         </div>
       </main>
@@ -504,11 +451,16 @@ const App: React.FC = () => {
         {menuState === MenuState.JUMPHOSTS && renderJumphostsMenu()}
         {menuState === MenuState.SERVER_SCAN && renderServerScanMenu()}
         {menuState === MenuState.WEB_SCAN && renderWebScanMenu()}
-        {menuState === MenuState.CONFIG && renderConfigMenu()}
         {menuState === MenuState.EXECUTING && (
-          <div className="p-8 border border-green-900 bg-black flex items-center justify-center gap-4">
-             <div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full"></div>
-             <div className="text-xl font-bold tracking-widest animate-pulse uppercase font-mono">Executing Remote Payload...</div>
+          <div className="p-10 border border-green-500 bg-black flex flex-col items-center justify-center gap-4 shadow-[0_0_30px_rgba(0,255,65,0.1)]">
+             <div className="relative">
+                <div className="animate-spin h-12 w-12 border-4 border-green-500 border-t-transparent rounded-full"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                </div>
+             </div>
+             <div className="text-xl font-black tracking-[0.2em] animate-pulse uppercase font-mono text-green-500">Injecting Tactical Payload...</div>
+             <div className="text-[9px] text-green-900 font-mono">ENCRYPTING UPLINK // BYPASSING LOCAL FIREWALLS</div>
           </div>
         )}
       </section>
